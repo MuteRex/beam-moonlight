@@ -5,6 +5,7 @@ using namespace Overlay;
 
 OverlayManager::OverlayManager() :
     m_PlacementLock(0),
+    m_CustomSurfaceLock(SDL_CreateMutex()),
     m_Renderer(nullptr),
     m_FontData(Path::readDataFile("ModeSeven.ttf"))
 {
@@ -42,6 +43,7 @@ OverlayManager::~OverlayManager()
             SDL_FreeSurface(m_Overlays[i].customSurface);
         }
     }
+    SDL_DestroyMutex(m_CustomSurfaceLock);
 
     TTF_Quit();
 
@@ -123,20 +125,37 @@ void OverlayManager::setOverlayRenderer(IOverlayRenderer* renderer)
     // static, so hand them to the new renderer ourselves.
     if (m_Renderer != nullptr) {
         for (int i = 0; i < OverlayType::OverlayMax; i++) {
-            if (m_Overlays[i].enabled && m_Overlays[i].customSurface != nullptr) {
-                updateOverlaySurface((OverlayType)i, SDL_DuplicateSurface(m_Overlays[i].customSurface));
+            SDL_LockMutex(m_CustomSurfaceLock);
+            SDL_Surface* copy = m_Overlays[i].enabled && m_Overlays[i].customSurface != nullptr ?
+                        SDL_DuplicateSurface(m_Overlays[i].customSurface) : nullptr;
+            SDL_UnlockMutex(m_CustomSurfaceLock);
+            if (copy != nullptr) {
+                updateOverlaySurface((OverlayType)i, copy, false);
             }
         }
     }
 }
 
-void OverlayManager::updateOverlaySurface(OverlayType type, SDL_Surface* surface)
+void OverlayManager::updateOverlaySurface(OverlayType type, SDL_Surface* surface, bool setEnabled)
 {
+    SDL_LockMutex(m_CustomSurfaceLock);
+
+    if (!setEnabled && !m_Overlays[type].enabled) {
+        // Overlay was switched off meanwhile; drop the late update
+        SDL_UnlockMutex(m_CustomSurfaceLock);
+        if (surface != nullptr) {
+            SDL_FreeSurface(surface);
+        }
+        return;
+    }
+
     if (m_Overlays[type].customSurface != nullptr && m_Overlays[type].customSurface != surface) {
         SDL_FreeSurface(m_Overlays[type].customSurface);
     }
     m_Overlays[type].customSurface = surface;
-    m_Overlays[type].enabled = surface != nullptr;
+    if (setEnabled) {
+        m_Overlays[type].enabled = surface != nullptr;
+    }
 
     if (surface == nullptr) {
         SDL_AtomicLock(&m_PlacementLock);
@@ -144,7 +163,9 @@ void OverlayManager::updateOverlaySurface(OverlayType type, SDL_Surface* surface
         SDL_AtomicUnlock(&m_PlacementLock);
     }
 
-    if (m_Renderer == nullptr) {
+    IOverlayRenderer* renderer = m_Renderer;
+    if (renderer == nullptr) {
+        SDL_UnlockMutex(m_CustomSurfaceLock);
         return;
     }
 
@@ -153,8 +174,9 @@ void OverlayManager::updateOverlaySurface(OverlayType type, SDL_Surface* surface
     SDL_Surface* oldSurface = (SDL_Surface*)SDL_AtomicSetPtr(
         (void**)&m_Overlays[type].surface,
         surface != nullptr ? SDL_DuplicateSurface(surface) : nullptr);
+    SDL_UnlockMutex(m_CustomSurfaceLock);
 
-    m_Renderer->notifyOverlayUpdated(type);
+    renderer->notifyOverlayUpdated(type);
 
     if (oldSurface != nullptr) {
         SDL_FreeSurface(oldSurface);

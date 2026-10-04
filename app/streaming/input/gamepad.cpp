@@ -1,3 +1,4 @@
+#include "streaming/beamstats.h"
 #include "streaming/session.h"
 
 #include <Limelight.h>
@@ -410,6 +411,7 @@ void SdlInputHandler::handleControllerButtonEvent(SDL_ControllerButtonEvent* eve
         // Toggle the stats overlay
         Session::get()->getOverlayManager().setOverlayState(Overlay::OverlayDebug,
                                                             !Session::get()->getOverlayManager().isOverlayEnabled(Overlay::OverlayDebug));
+        BeamStats::refresh();
 
         // Clear buttons down on this gamepad
         LiSendMultiControllerEvent(state->index, m_GamepadMask,

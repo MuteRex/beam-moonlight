@@ -74,5 +74,6 @@ private:
     int m_MaxVideoFps;
     int m_DisplayFps;
     PVIDEO_STATS m_VideoStats;
+    uint64_t m_LastPresentUs;
     int m_RendererAttributes;
 };

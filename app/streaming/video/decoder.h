@@ -31,6 +31,13 @@ typedef struct _VIDEO_STATS {
     double renderedFps;                        // high-res
     double videoMegabitsPerSec;                // current video bitrate in Mbps, not including FEC overhead
     uint64_t measurementStartUs;               // microseconds
+
+    // Beam: time between consecutive presented frames (frametime)
+    uint32_t frameIntervals;
+    uint64_t totalFrameIntervalUs;
+    uint64_t totalFrameIntervalSqUs;           // sum of squares, for jitter
+    uint32_t minFrameIntervalUs;
+    uint32_t maxFrameIntervalUs;
 } VIDEO_STATS, *PVIDEO_STATS;
 
 typedef struct _DECODER_PARAMETERS {

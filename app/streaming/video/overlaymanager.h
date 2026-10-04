@@ -41,8 +41,10 @@ public:
     void setOverlayRenderer(IOverlayRenderer* renderer);
 
     // Beam: overlays drawn from a caller-provided surface rather than text.
-    // Takes ownership of the surface. A null surface disables the overlay.
-    void updateOverlaySurface(OverlayType type, SDL_Surface* surface);
+    // Takes ownership of the surface. With setEnabled, a null surface disables
+    // the overlay and a non-null one enables it; otherwise the surface is only
+    // swapped in if the overlay is already enabled.
+    void updateOverlaySurface(OverlayType type, SDL_Surface* surface, bool setEnabled = true);
 
     // Beam: called by renderers to place an overlay anchored top-center. Returns
     // the rect in top-left-origin viewport coordinates and remembers it so input
@@ -76,6 +78,7 @@ private:
         int placedViewportHeight;
     } m_Overlays[OverlayMax];
     SDL_SpinLock m_PlacementLock;
+    SDL_mutex* m_CustomSurfaceLock;
     IOverlayRenderer* m_Renderer;
     QByteArray m_FontData;
 };

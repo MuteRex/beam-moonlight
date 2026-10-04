@@ -1,4 +1,5 @@
 #include "streaming/session.h"
+#include "streaming/beamstats.h"
 
 #include <Limelight.h>
 #include "SDL_compat.h"
@@ -157,6 +158,9 @@ void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
         // Toggle the stats overlay
         Session::get()->getOverlayManager().setOverlayState(Overlay::OverlayDebug,
                                                             !Session::get()->getOverlayManager().isOverlayEnabled(Overlay::OverlayDebug));
+
+        // Beam: show the last stats right away instead of on the next update
+        BeamStats::refresh();
         break;
 
     case KeyComboToggleMouseMode:

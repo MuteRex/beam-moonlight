@@ -1,5 +1,6 @@
 #include <Limelight.h>
 #include "ffmpeg.h"
+#include "streaming/beamstats.h"
 #include "utils.h"
 #include "streaming/session.h"
 
@@ -232,6 +233,8 @@ FFmpegVideoDecoder::FFmpegVideoDecoder(bool testOnly)
       m_FramesOut(0),
       m_LastFrameNumber(0),
       m_StreamFps(0),
+      m_StatsWindow(nullptr),
+      m_StatsVsync(false),
       m_VideoFormat(0),
       m_NeedsSpsFixup(false),
       m_TestOnly(testOnly),
@@ -493,6 +496,8 @@ bool FFmpegVideoDecoder::completeInitialization(const AVCodec* decoder, enum AVP
     m_StreamFps = params->frameRate;
     m_VideoFormat = params->videoFormat;
     m_CurrentTestMode = testMode;
+    m_StatsWindow = params->window;
+    m_StatsVsync = params->enableVsync;
 
     // Don't bother initializing Pacer if we're not actually going to render
     if (testMode != TestMode::TestFrameOnly) {
@@ -767,6 +772,14 @@ void FFmpegVideoDecoder::addVideoStats(VIDEO_STATS& src, VIDEO_STATS& dst)
     dst.totalPacerTimeUs += src.totalPacerTimeUs;
     dst.totalRenderTimeUs += src.totalRenderTimeUs;
 
+    dst.frameIntervals += src.frameIntervals;
+    dst.totalFrameIntervalUs += src.totalFrameIntervalUs;
+    dst.totalFrameIntervalSqUs += src.totalFrameIntervalSqUs;
+    if (dst.minFrameIntervalUs == 0 || (src.minFrameIntervalUs != 0 && src.minFrameIntervalUs < dst.minFrameIntervalUs)) {
+        dst.minFrameIntervalUs = src.minFrameIntervalUs;
+    }
+    dst.maxFrameIntervalUs = qMax(dst.maxFrameIntervalUs, src.maxFrameIntervalUs);
+
     if (dst.minHostProcessingLatency == 0) {
         dst.minHostProcessingLatency = src.minHostProcessingLatency;
     }
@@ -974,6 +987,85 @@ void FFmpegVideoDecoder::stringifyVideoStats(VIDEO_STATS& stats, char* output, i
 
         offset += ret;
     }
+}
+
+void FFmpegVideoDecoder::publishBeamStats(VIDEO_STATS& stats)
+{
+    BeamStats::Snapshot s = {};
+
+    s.scale = 1.0f;
+    SDL_DisplayMode mode = {};
+    if (m_StatsWindow != nullptr &&
+            SDL_GetCurrentDisplayMode(SDL_GetWindowDisplayIndex(m_StatsWindow), &mode) == 0) {
+        s.scale = SDL_max(1.0f, SDL_min(2.5f, mode.h / 1080.0f));
+        s.displayWidth = mode.w;
+        s.displayHeight = mode.h;
+        s.displayHz = mode.refresh_rate;
+    }
+    s.vsync = m_StatsVsync;
+
+    s.targetFps = m_StreamFps;
+    s.hostFps = stats.totalFps;
+    s.receivedFps = stats.receivedFps;
+    s.decodedFps = stats.decodedFps;
+    s.renderedFps = stats.renderedFps;
+
+    if (stats.frameIntervals > 0) {
+        double mean = (double)stats.totalFrameIntervalUs / stats.frameIntervals;
+        double variance = (double)stats.totalFrameIntervalSqUs / stats.frameIntervals - mean * mean;
+        s.hasFrametime = true;
+        s.frametimeMs = mean / 1000.0;
+        s.frametimeMinMs = stats.minFrameIntervalUs / 1000.0;
+        s.frametimeMaxMs = stats.maxFrameIntervalUs / 1000.0;
+        s.frametimeJitterMs = sqrt(SDL_max(0.0, variance)) / 1000.0;
+    }
+
+    if (stats.framesWithHostProcessingLatency > 0) {
+        s.hasHostLatency = true;
+        s.hostMs = (double)stats.totalHostProcessingLatency / 10 / stats.framesWithHostProcessingLatency;
+        s.hostMinMs = stats.minHostProcessingLatency / 10.0;
+        s.hostMaxMs = stats.maxHostProcessingLatency / 10.0;
+    }
+    if (stats.lastRtt != 0) {
+        s.hasRtt = true;
+        s.rttMs = stats.lastRtt;
+        s.rttVarianceMs = stats.lastRttVariance;
+    }
+    if (stats.decodedFrames > 0) {
+        s.decodeMs = (double)stats.totalDecodeTimeUs / 1000.0 / stats.decodedFrames;
+        s.jitterDropPct = (double)stats.pacerDroppedFrames / stats.decodedFrames * 100;
+    }
+    if (stats.renderedFrames > 0) {
+        s.queueMs = (double)stats.totalPacerTimeUs / 1000.0 / stats.renderedFrames;
+        s.renderMs = (double)stats.totalRenderTimeUs / 1000.0 / stats.renderedFrames;
+    }
+    if (stats.totalFrames > 0) {
+        s.networkDropPct = (double)stats.networkDroppedFrames / stats.totalFrames * 100;
+    }
+    s.bitrateMbps = m_BwTracker.GetAverageMbps();
+    s.peakBitrateMbps = m_BwTracker.GetPeakMbps();
+
+    s.width = m_VideoDecoderCtx != nullptr ? m_VideoDecoderCtx->width : m_OriginalVideoWidth;
+    s.height = m_VideoDecoderCtx != nullptr ? m_VideoDecoderCtx->height : m_OriginalVideoHeight;
+    const char* codec = (m_VideoFormat & VIDEO_FORMAT_MASK_AV1) ? "AV1" :
+                        (m_VideoFormat & VIDEO_FORMAT_MASK_H265) ? "HEVC" : "H.264";
+    SDL_snprintf(s.codec, sizeof(s.codec), "%s%s%s%s", codec,
+                 (m_VideoFormat & VIDEO_FORMAT_MASK_10BIT) ? " 10-bit" : "",
+                 (m_VideoFormat & VIDEO_FORMAT_MASK_YUV444) ? " 4:4:4" : "",
+                 LiGetCurrentHostDisplayHdrMode() ? " HDR" : "");
+
+    if (m_FrontendRenderer != nullptr && m_BackendRenderer != nullptr &&
+            m_FrontendRenderer != m_BackendRenderer) {
+        SDL_snprintf(s.renderer, sizeof(s.renderer), "%s › %s",
+                     m_BackendRenderer->getRendererName(), m_FrontendRenderer->getRendererName());
+    }
+    else if (m_FrontendRenderer != nullptr) {
+        SDL_strlcpy(s.renderer, m_FrontendRenderer->getRendererName(), sizeof(s.renderer));
+    }
+
+    s.clientCpuPct = BeamStats::sampleProcessCpu();
+
+    BeamStats::publish(s);
 }
 
 void FFmpegVideoDecoder::logVideoStats(VIDEO_STATS& stats, const char* title)
@@ -2126,10 +2218,8 @@ int FFmpegVideoDecoder::submitDecodeUnit(PDECODE_UNIT du)
             addVideoStats(m_LastWndVideoStats, lastTwoWndStats);
             addVideoStats(m_ActiveWndVideoStats, lastTwoWndStats);
 
-            stringifyVideoStats(lastTwoWndStats,
-                                Session::get()->getOverlayManager().getOverlayText(Overlay::OverlayDebug),
-                                Session::get()->getOverlayManager().getOverlayMaxTextLength());
-            Session::get()->getOverlayManager().setOverlayTextUpdated(Overlay::OverlayDebug);
+            // Beam: styled multi-level panel instead of the plain-text stats
+            publishBeamStats(lastTwoWndStats);
         }
 
         // Accumulate these values into the global stats

@@ -54,6 +54,8 @@ private:
 
     void logVideoStats(VIDEO_STATS& stats, const char* title);
 
+    void publishBeamStats(VIDEO_STATS& stats);
+
     void addVideoStats(VIDEO_STATS& src, VIDEO_STATS& dst);
 
     bool createFrontendRenderer(PDECODER_PARAMETERS params, bool useAlternateFrontend);
@@ -124,6 +126,8 @@ private:
 
     int m_LastFrameNumber;
     int m_StreamFps;
+    SDL_Window* m_StatsWindow;   // Beam stats overlay: display info
+    bool m_StatsVsync;
     int m_OriginalVideoWidth;
     int m_OriginalVideoHeight;
     int m_VideoFormat;

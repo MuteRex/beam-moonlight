@@ -38,7 +38,8 @@ Pacer::Pacer(IFFmpegRenderer* renderer, PVIDEO_STATS videoStats) :
     m_VsyncRenderer(renderer),
     m_MaxVideoFps(0),
     m_DisplayFps(0),
-    m_VideoStats(videoStats)
+    m_VideoStats(videoStats),
+    m_LastPresentUs(0)
 {
 
 }
@@ -341,6 +342,20 @@ void Pacer::renderFrame(AVFrame* frame)
 
     m_VideoStats->totalRenderTimeUs += (afterRender - beforeRender);
     m_VideoStats->renderedFrames++;
+
+    // Beam: frametime = interval between presented frames. Gaps over a second
+    // (stream stalls, minimized window) would swamp the stats, so skip them.
+    if (m_LastPresentUs != 0 && afterRender - m_LastPresentUs < 1000000) {
+        uint32_t interval = (uint32_t)(afterRender - m_LastPresentUs);
+        m_VideoStats->frameIntervals++;
+        m_VideoStats->totalFrameIntervalUs += interval;
+        m_VideoStats->totalFrameIntervalSqUs += (uint64_t)interval * interval;
+        if (m_VideoStats->minFrameIntervalUs == 0 || interval < m_VideoStats->minFrameIntervalUs) {
+            m_VideoStats->minFrameIntervalUs = interval;
+        }
+        m_VideoStats->maxFrameIntervalUs = SDL_max(m_VideoStats->maxFrameIntervalUs, interval);
+    }
+    m_LastPresentUs = afterRender;
 
     // Wait until after next frame to free this one to ensure the GPU
     // doesn't stall or read garbage if the backing buffer gets returned

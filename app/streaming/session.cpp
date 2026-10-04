@@ -1,4 +1,5 @@
 #include "session.h"
+#include "beamstats.h"
 #include "settings/streamingpreferences.h"
 #include "streaming/streamutils.h"
 #include "backend/richpresencemanager.h"
@@ -1981,8 +1982,9 @@ void Session::exec()
     // Toggle the stats overlay if requested by the user
     m_OverlayManager.setOverlayState(Overlay::OverlayDebug, m_Preferences->showPerformanceOverlay);
 
-    // Beam: show the in-session controls pill
+    // Beam: show the in-session controls pill; start the stats from scratch
     m_InputHandler->setControlsVisible(true);
+    BeamStats::reset();
 
     // Switch to async logging mode when we enter the SDL loop
     StreamUtils::enterAsyncLoggingMode();

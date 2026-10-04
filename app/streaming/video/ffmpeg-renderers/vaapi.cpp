@@ -6,6 +6,7 @@
 #include <streaming/session.h>
 
 #include "vaapi.h"
+#include "streaming/beamstats.h"
 #include "utils.h"
 #include <streaming/streamutils.h>
 
@@ -395,6 +396,7 @@ VAAPIRenderer::initialize(PDECODER_PARAMETERS params)
 
     const char* vendorString = vaQueryVendorString(vaDeviceContext->display);
     QString vendorStr(vendorString);
+    BeamStats::setGpuName(vendorString);
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                 "Driver: %s",
                 vendorString ? vendorString : "<unknown>");
