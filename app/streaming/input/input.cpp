@@ -150,6 +150,8 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
     m_ControlsScale = 1.0f;
     m_ControlsFont = nullptr;
     m_ControlsSmallFont = nullptr;
+    m_PasteThread = nullptr;
+    SDL_AtomicSet(&m_PasteCancel, 0);
 
     m_OldIgnoreDevices = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES);
     m_OldIgnoreDevicesExcept = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT);
@@ -235,6 +237,7 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
 SdlInputHandler::~SdlInputHandler()
 {
     cleanupControls();
+    cancelPaste();
 
     for (int i = 0; i < MAX_GAMEPADS; i++) {
         if (m_GamepadState[i].mouseEmulationTimer != 0) {

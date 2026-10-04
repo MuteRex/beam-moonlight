@@ -6,6 +6,9 @@
 #include "SDL_compat.h"
 #include <SDL_ttf.h>
 
+#include <string>
+#include <vector>
+
 struct GamepadState {
     SDL_GameController* controller;
     SDL_JoystickID jsId;
@@ -81,6 +84,14 @@ struct DualSenseOutputReport{
 
 #define GAMEPAD_HAPTIC_SIMPLE_HIFREQ_MOTOR_WEIGHT 0.33
 #define GAMEPAD_HAPTIC_SIMPLE_LOWFREQ_MOTOR_WEIGHT 0.8
+
+// Beam: one step of a paste: a key press/release, or a run of UTF-8 text
+struct BeamPasteEvent {
+    short keyCode;      // 0 = text event
+    char action;
+    char modifiers;
+    std::string text;
+};
 
 class SdlInputHandler
 {
@@ -197,6 +208,10 @@ private:
 
     void typeTextAsKeys(const char* text);
 
+    static void buildPasteEvents(const char* text, std::vector<BeamPasteEvent>& events);
+
+    void cancelPaste();
+
     enum ControlsItem {
         ControlsItemPanel = -3,
         ControlsItemNone = -2,
@@ -299,6 +314,10 @@ private:
     float m_ControlsScale;
     TTF_Font* m_ControlsFont;
     TTF_Font* m_ControlsSmallFont;
+
+    // Beam: background typing for paste
+    SDL_Thread* m_PasteThread;
+    SDL_atomic_t m_PasteCancel;
     int m_NumFingersDown;
 
     static const int k_ButtonMap[];

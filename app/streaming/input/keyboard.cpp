@@ -1,4 +1,7 @@
 #include "streaming/session.h"
+
+#include <string>
+#include <vector>
 #include "streaming/beamstats.h"
 
 #include <Limelight.h>
@@ -63,9 +66,63 @@ static bool asciiToVirtualKey(char c, short* vk, bool* shift)
     return true;
 }
 
-void SdlInputHandler::typeTextAsKeys(const char* text)
+namespace {
+
+struct PasteJob {
+    std::vector<BeamPasteEvent> events;
+    SDL_atomic_t* cancel;
+};
+
+// Sunshine on Linux loses key events that arrive back to back (a lost key-up
+// then auto-repeats on the host), so each event is followed by a short gap.
+const Uint32 k_PasteEventGapMs = 5;
+
+const short k_ShiftKey = 0x8000 | 0xA0; // VK_LSHIFT
+
+int pasteThreadProc(void* data)
 {
-    const short shiftKey = 0x8000 | 0xA0; // VK_LSHIFT
+    PasteJob* job = (PasteJob*)data;
+    short keyDown = 0;
+    bool shiftDown = false;
+
+    for (const BeamPasteEvent& event : job->events) {
+        if (SDL_AtomicGet(job->cancel)) {
+            break;
+        }
+        if (event.keyCode == 0) {
+            LiSendUtf8TextEvent(event.text.data(), (unsigned int)event.text.size());
+        }
+        else {
+            LiSendKeyboardEvent2(event.keyCode, event.action, event.modifiers, 0);
+            bool down = event.action == KEY_ACTION_DOWN;
+            if (event.keyCode == k_ShiftKey) {
+                shiftDown = down;
+            }
+            else {
+                keyDown = down ? event.keyCode : 0;
+            }
+        }
+        SDL_Delay(k_PasteEventGapMs);
+    }
+
+    // Never leave a key held on the host if we were cancelled mid-character
+    if (keyDown != 0) {
+        LiSendKeyboardEvent2(keyDown, KEY_ACTION_UP, 0, 0);
+    }
+    if (shiftDown) {
+        LiSendKeyboardEvent2(k_ShiftKey, KEY_ACTION_UP, 0, 0);
+    }
+
+    delete job;
+    return 0;
+}
+
+}
+
+// Beam: turns text into US-layout key presses (plus text events for characters
+// with no key). Pure, so it can be tested without a connection.
+void SdlInputHandler::buildPasteEvents(const char* text, std::vector<BeamPasteEvent>& events)
+{
     bool shiftDown = false;
     size_t length = SDL_min(strlen(text), (size_t)16384);
 
@@ -84,7 +141,7 @@ void SdlInputHandler::typeTextAsKeys(const char* text)
 
         if ((unsigned char)c >= 0x80 || !asciiToVirtualKey(c, &vk, &shift)) {
             if (shiftDown) {
-                LiSendKeyboardEvent2(shiftKey, KEY_ACTION_UP, 0, 0);
+                events.push_back({ k_ShiftKey, KEY_ACTION_UP, 0, {} });
                 shiftDown = false;
             }
 
@@ -94,24 +151,50 @@ void SdlInputHandler::typeTextAsKeys(const char* text)
                 end++;
             }
             if ((unsigned char)c >= 0x20) {
-                LiSendUtf8TextEvent(text + i, (unsigned int)(end - i));
+                events.push_back({ 0, 0, 0, std::string(text + i, end - i) });
             }
             i = end - 1;
             continue;
         }
 
         if (shift != shiftDown) {
-            LiSendKeyboardEvent2(shiftKey, shift ? KEY_ACTION_DOWN : KEY_ACTION_UP, 0, 0);
+            events.push_back({ k_ShiftKey, shift ? (char)KEY_ACTION_DOWN : (char)KEY_ACTION_UP, 0, {} });
             shiftDown = shift;
         }
 
         char modifiers = shift ? MODIFIER_SHIFT : 0;
-        LiSendKeyboardEvent2(0x8000 | vk, KEY_ACTION_DOWN, modifiers, 0);
-        LiSendKeyboardEvent2(0x8000 | vk, KEY_ACTION_UP, modifiers, 0);
+        events.push_back({ (short)(0x8000 | vk), KEY_ACTION_DOWN, modifiers, {} });
+        events.push_back({ (short)(0x8000 | vk), KEY_ACTION_UP, modifiers, {} });
     }
 
     if (shiftDown) {
-        LiSendKeyboardEvent2(shiftKey, KEY_ACTION_UP, 0, 0);
+        events.push_back({ k_ShiftKey, KEY_ACTION_UP, 0, {} });
+    }
+}
+
+void SdlInputHandler::cancelPaste()
+{
+    if (m_PasteThread != nullptr) {
+        SDL_AtomicSet(&m_PasteCancel, 1);
+        SDL_WaitThread(m_PasteThread, nullptr);
+        m_PasteThread = nullptr;
+    }
+    SDL_AtomicSet(&m_PasteCancel, 0);
+}
+
+void SdlInputHandler::typeTextAsKeys(const char* text)
+{
+    // A new paste replaces one still typing
+    cancelPaste();
+
+    PasteJob* job = new PasteJob();
+    job->cancel = &m_PasteCancel;
+    buildPasteEvents(text, job->events);
+
+    // Typed on its own thread so the stream keeps running while it types
+    m_PasteThread = SDL_CreateThread(pasteThreadProc, "BeamPaste", job);
+    if (m_PasteThread == nullptr) {
+        delete job;
     }
 }
 
