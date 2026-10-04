@@ -37,7 +37,12 @@ ApplicationWindow {
     Component.onCompleted: {
         // Show the window according to the user's preferences
         if (SystemProperties.hasDesktopEnvironment) {
-            if (StreamingPreferences.uiDisplayMode == StreamingPreferences.UI_MAXIMIZED) {
+            // Beam: command-line launches only show a progress window, so never
+            // let it cover the screen (it also decides the stream window state)
+            if (!runConfigChecks) {
+                window.show()
+            }
+            else if (StreamingPreferences.uiDisplayMode == StreamingPreferences.UI_MAXIMIZED) {
                 window.showMaximized()
             }
             else if (StreamingPreferences.uiDisplayMode == StreamingPreferences.UI_FULLSCREEN) {

@@ -1320,9 +1320,31 @@ void Session::getWindowDimensions(int& x, int& y,
 {
     int displayIndex = 0;
 
+    // Beam: the launcher passes the position of the monitor it is shown on,
+    // since on Wayland the Qt window can't tell us where it is.
+    QList<QByteArray> beamDisplayPos = qgetenv("BEAM_DISPLAY_POS").split(',');
+    int beamDisplayIndex = -1;
+    if (m_Window == nullptr && beamDisplayPos.size() == 2) {
+        int displayX = beamDisplayPos[0].toInt(), displayY = beamDisplayPos[1].toInt();
+        for (int i = 0; i < SDL_GetNumVideoDisplays(); i++) {
+            SDL_Rect displayBounds;
+            if (SDL_GetDisplayBounds(i, &displayBounds) == 0 &&
+                    displayBounds.x == displayX && displayBounds.y == displayY) {
+                SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
+                            "Using Beam launcher display %d at (%d,%d)",
+                            i, displayX, displayY);
+                beamDisplayIndex = i;
+                break;
+            }
+        }
+    }
+
     if (m_Window != nullptr) {
         displayIndex = SDL_GetWindowDisplayIndex(m_Window);
         SDL_assert(displayIndex >= 0);
+    }
+    else if (beamDisplayIndex >= 0) {
+        displayIndex = beamDisplayIndex;
     }
     // Create our window on the same display that Qt's UI
     // was being displayed on.
@@ -1365,9 +1387,11 @@ void Session::getWindowDimensions(int& x, int& y,
 
     SDL_Rect usableBounds;
     if (SDL_GetDisplayUsableBounds(displayIndex, &usableBounds) == 0) {
-        // If the stream resolution fits within the usable display area, use it directly
-        if (m_StreamConfig.width <= usableBounds.w &&
-            m_StreamConfig.height <= usableBounds.h) {
+        // If the stream resolution fits within the usable display area, use it directly.
+        // Beam: leave room for panels and decorations, since some platforms (Wayland)
+        // report the whole display as usable and a display-sized window gets maximized.
+        if (m_StreamConfig.width <= usableBounds.w * 0.9f &&
+            m_StreamConfig.height <= usableBounds.h * 0.9f) {
             width = m_StreamConfig.width;
             height = m_StreamConfig.height;
         } else {
