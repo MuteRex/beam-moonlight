@@ -4,6 +4,7 @@
 using namespace Overlay;
 
 OverlayManager::OverlayManager() :
+    m_PlacementLock(0),
     m_Renderer(nullptr),
     m_FontData(Path::readDataFile("ModeSeven.ttf"))
 {
@@ -36,6 +37,9 @@ OverlayManager::~OverlayManager()
         }
         if (m_Overlays[i].font != nullptr) {
             TTF_CloseFont(m_Overlays[i].font);
+        }
+        if (m_Overlays[i].customSurface != nullptr) {
+            SDL_FreeSurface(m_Overlays[i].customSurface);
         }
     }
 
@@ -114,6 +118,92 @@ SDL_Color OverlayManager::getOverlayColor(OverlayType type)
 void OverlayManager::setOverlayRenderer(IOverlayRenderer* renderer)
 {
     m_Renderer = renderer;
+
+    // Text overlays are refreshed by their owners, but custom surfaces are
+    // static, so hand them to the new renderer ourselves.
+    if (m_Renderer != nullptr) {
+        for (int i = 0; i < OverlayType::OverlayMax; i++) {
+            if (m_Overlays[i].enabled && m_Overlays[i].customSurface != nullptr) {
+                updateOverlaySurface((OverlayType)i, SDL_DuplicateSurface(m_Overlays[i].customSurface));
+            }
+        }
+    }
+}
+
+void OverlayManager::updateOverlaySurface(OverlayType type, SDL_Surface* surface)
+{
+    if (m_Overlays[type].customSurface != nullptr && m_Overlays[type].customSurface != surface) {
+        SDL_FreeSurface(m_Overlays[type].customSurface);
+    }
+    m_Overlays[type].customSurface = surface;
+    m_Overlays[type].enabled = surface != nullptr;
+
+    if (surface == nullptr) {
+        SDL_AtomicLock(&m_PlacementLock);
+        SDL_zero(m_Overlays[type].placedRect);
+        SDL_AtomicUnlock(&m_PlacementLock);
+    }
+
+    if (m_Renderer == nullptr) {
+        return;
+    }
+
+    // The renderer takes ownership of what it pulls, so give it a copy and
+    // keep the original for future renderers.
+    SDL_Surface* oldSurface = (SDL_Surface*)SDL_AtomicSetPtr(
+        (void**)&m_Overlays[type].surface,
+        surface != nullptr ? SDL_DuplicateSurface(surface) : nullptr);
+
+    m_Renderer->notifyOverlayUpdated(type);
+
+    if (oldSurface != nullptr) {
+        SDL_FreeSurface(oldSurface);
+    }
+}
+
+SDL_Rect OverlayManager::placeTopCenterOverlay(OverlayType type, int surfaceWidth, int surfaceHeight,
+                                               int viewportWidth, int viewportHeight)
+{
+    SDL_Rect rect;
+    rect.x = SDL_max(0, (viewportWidth - surfaceWidth) / 2);
+    rect.y = 0;
+    rect.w = surfaceWidth;
+    rect.h = surfaceHeight;
+
+    SDL_AtomicLock(&m_PlacementLock);
+    m_Overlays[type].placedRect = rect;
+    m_Overlays[type].placedViewportWidth = viewportWidth;
+    m_Overlays[type].placedViewportHeight = viewportHeight;
+    SDL_AtomicUnlock(&m_PlacementLock);
+
+    return rect;
+}
+
+bool OverlayManager::windowPointToOverlay(OverlayType type, int windowX, int windowY,
+                                          int windowWidth, int windowHeight,
+                                          int* overlayX, int* overlayY)
+{
+    SDL_AtomicLock(&m_PlacementLock);
+    SDL_Rect rect = m_Overlays[type].placedRect;
+    int viewportWidth = m_Overlays[type].placedViewportWidth;
+    int viewportHeight = m_Overlays[type].placedViewportHeight;
+    SDL_AtomicUnlock(&m_PlacementLock);
+
+    if (rect.w == 0 || rect.h == 0 || windowWidth <= 0 || windowHeight <= 0) {
+        return false;
+    }
+
+    // Renderers may draw in drawable pixels while input arrives in window
+    // points (HiDPI), so scale between the two.
+    int x = windowX * viewportWidth / windowWidth;
+    int y = windowY * viewportHeight / windowHeight;
+    if (x < rect.x || y < rect.y || x >= rect.x + rect.w || y >= rect.y + rect.h) {
+        return false;
+    }
+
+    *overlayX = x - rect.x;
+    *overlayY = y - rect.y;
+    return true;
 }
 
 void OverlayManager::notifyOverlayUpdated(OverlayType type)

@@ -1957,6 +1957,9 @@ void Session::exec()
     // Toggle the stats overlay if requested by the user
     m_OverlayManager.setOverlayState(Overlay::OverlayDebug, m_Preferences->showPerformanceOverlay);
 
+    // Beam: show the in-session controls pill
+    m_InputHandler->setControlsVisible(true);
+
     // Switch to async logging mode when we enter the SDL loop
     StreamUtils::enterAsyncLoggingMode();
 
@@ -2241,6 +2244,9 @@ void Session::exec()
 
             // After a window resize, we need to reset the pointer lock region
             m_InputHandler->updatePointerRegionLock();
+
+            // Beam: re-place the controls pill for the new window size
+            m_InputHandler->refreshControls();
 
             SDL_UnlockMutex(m_DecoderLock);
             break;

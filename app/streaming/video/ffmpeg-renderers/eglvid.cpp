@@ -213,6 +213,13 @@ void EGLRenderer::renderOverlay(Overlay::OverlayType type, int viewportWidth, in
             // Top left
             overlayRect.x = 0;
             overlayRect.y = viewportHeight - newSurface->h;
+        }
+        else if (type == Overlay::OverlayControls) {
+            // Top center (flipped into GL's bottom-left origin)
+            SDL_Rect placed = Session::get()->getOverlayManager().placeTopCenterOverlay(type, newSurface->w, newSurface->h,
+                                                                                         viewportWidth, viewportHeight);
+            overlayRect.x = placed.x;
+            overlayRect.y = viewportHeight - placed.y - newSurface->h;
         } else {
             SDL_assert(false);
         }

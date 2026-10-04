@@ -135,6 +135,21 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
     m_SpecialKeyCombos[KeyComboToggleKeyboardGrab].scanCode = SDL_SCANCODE_K;
     m_SpecialKeyCombos[KeyComboToggleKeyboardGrab].enabled = WMUtils::isRunningDesktopEnvironment();
 
+    m_SpecialKeyCombos[KeyComboToggleControlsMenu].keyCombo = KeyComboToggleControlsMenu;
+    m_SpecialKeyCombos[KeyComboToggleControlsMenu].keyCode = SDLK_b;
+    m_SpecialKeyCombos[KeyComboToggleControlsMenu].scanCode = SDL_SCANCODE_B;
+    m_SpecialKeyCombos[KeyComboToggleControlsMenu].enabled = true;
+
+    m_ControlsVisible = false;
+    m_ControlsPillHidden = qEnvironmentVariableIntValue("BEAM_HIDE_PILL") != 0;
+    m_ControlsMenuOpen = false;
+    m_ControlsRestoreCapture = false;
+    m_ControlsHoveredItem = ControlsItemNone;
+    m_ControlsPressedItem = ControlsItemNone;
+    m_ControlsScale = 1.0f;
+    m_ControlsFont = nullptr;
+    m_ControlsSmallFont = nullptr;
+
     m_OldIgnoreDevices = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES);
     m_OldIgnoreDevicesExcept = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT);
 
@@ -218,6 +233,8 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
 
 SdlInputHandler::~SdlInputHandler()
 {
+    cleanupControls();
+
     for (int i = 0; i < MAX_GAMEPADS; i++) {
         if (m_GamepadState[i].mouseEmulationTimer != 0) {
             Session::get()->notifyMouseEmulationMode(false);

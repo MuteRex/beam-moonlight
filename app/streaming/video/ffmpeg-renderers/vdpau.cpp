@@ -447,6 +447,13 @@ void VDPAURenderer::notifyOverlayUpdated(Overlay::OverlayType type)
             overlayRect.x0 = 0;
             overlayRect.y0 = 0;
         }
+        else if (type == Overlay::OverlayControls) {
+            // Top center
+            SDL_Rect placed = Session::get()->getOverlayManager().placeTopCenterOverlay(type, newSurface->w, newSurface->h,
+                                                                                         m_DisplayWidth, m_DisplayHeight);
+            overlayRect.x0 = placed.x;
+            overlayRect.y0 = placed.y;
+        }
 
         overlayRect.x1 = overlayRect.x0 + newSurface->w;
         overlayRect.y1 = overlayRect.y0 + newSurface->h;

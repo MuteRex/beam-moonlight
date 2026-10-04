@@ -1573,6 +1573,11 @@ void DrmRenderer::notifyOverlayUpdated(Overlay::OverlayType type)
             overlayRect.x = 0;
             overlayRect.y = 0;
         }
+        else if (type == Overlay::OverlayControls) {
+            // Top center
+            overlayRect = Session::get()->getOverlayManager().placeTopCenterOverlay(type, newSurface->w, newSurface->h,
+                                                                                     m_OutputRect.w, m_OutputRect.h);
+        }
 
         overlayRect.w = newSurface->w;
         overlayRect.h = newSurface->h;

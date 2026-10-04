@@ -766,6 +766,15 @@ void VAAPIRenderer::notifyOverlayUpdated(Overlay::OverlayType type)
             overlayRect.x = 0;
             overlayRect.y = 0;
         }
+        else if (type == Overlay::OverlayControls) {
+            // Top center
+            int windowWidth, windowHeight;
+            SDL_GetWindowSize(m_Window, &windowWidth, &windowHeight);
+            SDL_Rect placed = Session::get()->getOverlayManager().placeTopCenterOverlay(type, newSurface->w, newSurface->h,
+                                                                                         windowWidth, windowHeight);
+            overlayRect.x = placed.x;
+            overlayRect.y = placed.y;
+        }
 
         overlayRect.w = newSurface->w;
         overlayRect.h = newSurface->h;

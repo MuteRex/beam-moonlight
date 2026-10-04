@@ -34,6 +34,10 @@ void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
         // Ignore synthetic mouse events
         return;
     }
+    else if (handleControlsButtonEvent(event)) {
+        // Beam: consumed by the in-session pill/menu
+        return;
+    }
     else if (!isCaptureActive()) {
         if (event->button == SDL_BUTTON_LEFT && event->state == SDL_RELEASED &&
                 isMouseInVideoRegion(event->x, event->y)) {
@@ -92,6 +96,11 @@ void SdlInputHandler::handleMouseButtonEvent(SDL_MouseButtonEvent* event)
 
 void SdlInputHandler::handleMouseMotionEvent(SDL_MouseMotionEvent* event)
 {
+    if (event->which != SDL_TOUCH_MOUSEID) {
+        // Beam: hover feedback for the in-session pill/menu
+        handleControlsMotionEvent(event->x, event->y);
+    }
+
     if (!isCaptureActive()) {
         // Not capturing
         return;

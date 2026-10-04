@@ -1038,6 +1038,14 @@ void PlVkRenderer::renderFrame(AVFrame *frame)
                 overlayParts[i].dst.x0 = 0;
                 overlayParts[i].dst.y0 = 0;
             }
+            else if (i == Overlay::OverlayControls) {
+                // Top center
+                SDL_Rect placed = Session::get()->getOverlayManager().placeTopCenterOverlay((Overlay::OverlayType)i,
+                                                                                             (int)overlayParts[i].src.x1, (int)overlayParts[i].src.y1,
+                                                                                             (int)targetFrame.crop.x1, (int)targetFrame.crop.y1);
+                overlayParts[i].dst.x0 = placed.x;
+                overlayParts[i].dst.y0 = placed.y;
+            }
             overlayParts[i].dst.x1 = overlayParts[i].dst.x0 + overlayParts[i].src.x1;
             overlayParts[i].dst.y1 = overlayParts[i].dst.y0 + overlayParts[i].src.y1;
 

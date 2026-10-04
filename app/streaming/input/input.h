@@ -4,6 +4,7 @@
 #include "backend/computermanager.h"
 
 #include "SDL_compat.h"
+#include <SDL_ttf.h>
 
 struct GamepadState {
     SDL_GameController* controller;
@@ -152,6 +153,11 @@ public:
 
     void updatePointerRegionLock();
 
+    // Beam: in-session pill/menu overlay (controls.cpp)
+    void setControlsVisible(bool visible);
+
+    void refreshControls();
+
     static
     QString getUnmappedGamepads();
 
@@ -168,6 +174,7 @@ private:
         KeyComboTogglePointerRegionLock,
         KeyComboQuitAndExit,
         KeyComboToggleKeyboardGrab,
+        KeyComboToggleControlsMenu,
         KeyComboMax
     };
 
@@ -187,6 +194,34 @@ private:
     void handleRelativeFingerEvent(SDL_TouchFingerEvent* event);
 
     void performSpecialKeyCombo(KeyCombo combo);
+
+    enum ControlsItem {
+        ControlsItemPanel = -3,
+        ControlsItemNone = -2,
+        ControlsItemPill = -1,
+        ControlsItemMouseMode,
+        ControlsItemFullScreen,
+        ControlsItemStats,
+        ControlsItemPaste,
+        ControlsItemReleaseMouse,
+        ControlsItemMinimize,
+        ControlsItemDisconnect,
+        ControlsItemMax
+    };
+
+    bool controlsAcceptPointer();
+
+    int controlsHitTest(int windowX, int windowY);
+
+    bool handleControlsButtonEvent(SDL_MouseButtonEvent* event);
+
+    void handleControlsMotionEvent(int windowX, int windowY);
+
+    void setControlsMenuOpen(bool open);
+
+    void renderControls();
+
+    void cleanupControls();
 
     static
     Uint32 longPressTimerCallback(Uint32 interval, void* param);
@@ -248,6 +283,17 @@ private:
     SDL_TimerID m_RightButtonReleaseTimer;
     SDL_TimerID m_DragTimer;
     char m_DragButton;
+
+    // Beam: controls overlay state
+    bool m_ControlsVisible;
+    bool m_ControlsPillHidden;
+    bool m_ControlsMenuOpen;
+    bool m_ControlsRestoreCapture;
+    int m_ControlsHoveredItem;
+    int m_ControlsPressedItem;
+    float m_ControlsScale;
+    TTF_Font* m_ControlsFont;
+    TTF_Font* m_ControlsSmallFont;
     int m_NumFingersDown;
 
     static const int k_ButtonMap[];
