@@ -130,9 +130,13 @@ void fillRoundedPanel(SDL_Surface* surface, SDL_Rect rect, float radius, SDL_Col
     SDL_Rect inner = { rect.x + borderWidth, rect.y + borderWidth, rect.w - 2 * borderWidth, rect.h - 2 * borderWidth };
 
     // The inner fill replaces rather than blends so translucency is preserved
-    for (int y = inner.y; y < inner.y + inner.h; y++) {
+    SDL_Rect bounds = { 0, 0, surface->w, surface->h }, clear;
+    if (!SDL_IntersectRect(&inner, &bounds, &clear)) {
+        return;
+    }
+    for (int y = clear.y; y < clear.y + clear.h; y++) {
         Uint32* row = (Uint32*)((Uint8*)surface->pixels + y * surface->pitch);
-        for (int x = inner.x; x < inner.x + inner.w; x++) {
+        for (int x = clear.x; x < clear.x + clear.w; x++) {
             row[x] &= 0x00FFFFFF;
         }
     }
