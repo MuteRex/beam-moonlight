@@ -22,6 +22,98 @@
 #define GET_KEYPRESS_EXTENDED_MODIFIER(x) ((char)(((x) >> 16) & 0xFF))
 #define GET_KEYPRESS_FLAGS(x) ((char)(((x) >> 24) & 0xFF))
 
+// Beam: maps a printable ASCII character to its US-layout VK code and whether Shift is needed
+static bool asciiToVirtualKey(char c, short* vk, bool* shift)
+{
+    static const char unshifted[] = "`1234567890-=[]\\;',./";
+    static const char shifted[]   = "~!@#$%^&*()_+{}|:\"<>?";
+    static const short symbolKeys[] = {
+        0xC0, '1', '2', '3', '4', '5', '6', '7', '8', '9', '0', 0xBD, 0xBB,
+        0xDB, 0xDD, 0xDC, 0xBA, 0xDE, 0xBC, 0xBE, 0xBF,
+    };
+
+    *shift = false;
+    if (c >= 'a' && c <= 'z') {
+        *vk = 'A' + (c - 'a');
+    }
+    else if (c >= 'A' && c <= 'Z') {
+        *vk = c;
+        *shift = true;
+    }
+    else if (c == ' ') {
+        *vk = 0x20;
+    }
+    else if (c == '\n') {
+        *vk = 0x0D; // VK_RETURN
+    }
+    else if (c == '\t') {
+        *vk = 0x09; // VK_TAB
+    }
+    else if (const char* p = strchr(unshifted, c); p != nullptr && c != 0) {
+        *vk = symbolKeys[p - unshifted];
+    }
+    else if (const char* p = strchr(shifted, c); p != nullptr && c != 0) {
+        *vk = symbolKeys[p - shifted];
+        *shift = true;
+    }
+    else {
+        return false;
+    }
+    return true;
+}
+
+void SdlInputHandler::typeTextAsKeys(const char* text)
+{
+    const short shiftKey = 0x8000 | 0xA0; // VK_LSHIFT
+    bool shiftDown = false;
+    size_t length = SDL_min(strlen(text), (size_t)16384);
+
+    for (size_t i = 0; i < length; i++) {
+        char c = text[i];
+        short vk;
+        bool shift;
+
+        // CRLF -> single Enter
+        if (c == '\r') {
+            if (text[i + 1] == '\n') {
+                continue;
+            }
+            c = '\n';
+        }
+
+        if ((unsigned char)c >= 0x80 || !asciiToVirtualKey(c, &vk, &shift)) {
+            if (shiftDown) {
+                LiSendKeyboardEvent2(shiftKey, KEY_ACTION_UP, 0, 0);
+                shiftDown = false;
+            }
+
+            // Send this whole UTF-8 sequence (or unmapped control char) as text
+            size_t end = i + 1;
+            while (end < length && ((unsigned char)text[end] & 0xC0) == 0x80) {
+                end++;
+            }
+            if ((unsigned char)c >= 0x20) {
+                LiSendUtf8TextEvent(text + i, (unsigned int)(end - i));
+            }
+            i = end - 1;
+            continue;
+        }
+
+        if (shift != shiftDown) {
+            LiSendKeyboardEvent2(shiftKey, shift ? KEY_ACTION_DOWN : KEY_ACTION_UP, 0, 0);
+            shiftDown = shift;
+        }
+
+        char modifiers = shift ? MODIFIER_SHIFT : 0;
+        LiSendKeyboardEvent2(0x8000 | vk, KEY_ACTION_DOWN, modifiers, 0);
+        LiSendKeyboardEvent2(0x8000 | vk, KEY_ACTION_UP, modifiers, 0);
+    }
+
+    if (shiftDown) {
+        LiSendKeyboardEvent2(shiftKey, KEY_ACTION_UP, 0, 0);
+    }
+}
+
 void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
 {
     switch (combo) {
@@ -112,18 +204,11 @@ void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
 
         char* text;
         if (SDL_HasClipboardText() && (text = SDL_GetClipboardText()) != nullptr) {
-            // Sending both CR and LF will lead to two newlines in the destination for
-            // each newline in the source, so we fix up any CRLFs into just a single LF.
-            for (char* c = text; *c != 0; c++) {
-                if (*c == '\r' && *(c + 1) == '\n') {
-                    // We're using strlen() rather than strlen() - 1 since we need to add 1
-                    // to copy the null terminator which is not included in strlen()'s count.
-                    memmove(c, c + 1, strlen(c));
-                }
-            }
-
-            // Send this text to the PC
-            LiSendUtf8TextEvent(text, (unsigned int)strlen(text));
+            // Beam: type the clipboard as real key presses. The text event below is
+            // turned into Ctrl+Shift+U unicode sequences by Sunshine on Linux, which
+            // terminals and many apps ignore, so it is only used for characters that
+            // have no key on a US layout.
+            typeTextAsKeys(text);
 
             // SDL_GetClipboardText() allocates, so we must free
             SDL_free((void*)text);

@@ -195,6 +195,8 @@ private:
 
     void performSpecialKeyCombo(KeyCombo combo);
 
+    void typeTextAsKeys(const char* text);
+
     enum ControlsItem {
         ControlsItemPanel = -3,
         ControlsItemNone = -2,
