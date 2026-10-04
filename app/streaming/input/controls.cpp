@@ -24,8 +24,10 @@ const SDL_Color k_Text = {0xE8, 0xE8, 0xE8, 0xFF};
 const SDL_Color k_TextDim = {0x80, 0x80, 0x80, 0xFF};
 const SDL_Color k_Danger = {0xFF, 0x6B, 0x6B, 0xFF};
 
-// Opacity of the pill when it isn't being interacted with
-const float k_IdleOpacity = 0.55f;
+// When idle the pill collapses to a slim handle on the top edge so it doesn't
+// cover game UI or the host's cursor; hovering it expands the full pill.
+const SDL_Color k_HandleBacking = {0x00, 0x00, 0x00, 0x70};
+const SDL_Color k_Handle = {0x9A, 0xE6, 0x00, 0xC0};
 
 const char* const k_FontCandidates[] = {
     "/usr/share/fonts/truetype/ubuntu/Ubuntu-M.ttf",
@@ -167,17 +169,6 @@ void drawText(SDL_Surface* surface, TTF_Font* font, const char* text, SDL_Color 
     SDL_SetSurfaceBlendMode(textSurface, SDL_BLENDMODE_BLEND);
     SDL_BlitSurface(textSurface, nullptr, surface, &dst);
     SDL_FreeSurface(textSurface);
-}
-
-void multiplyAlpha(SDL_Surface* surface, float factor)
-{
-    for (int y = 0; y < surface->h; y++) {
-        Uint32* row = (Uint32*)((Uint8*)surface->pixels + y * surface->pitch);
-        for (int x = 0; x < surface->w; x++) {
-            Uint32 a = (Uint32)(((row[x] >> 24) & 0xFF) * factor + 0.5f);
-            row[x] = (row[x] & 0x00FFFFFF) | (a << 24);
-        }
-    }
 }
 
 TTF_Font* openControlsFont(int pointSize)
@@ -367,6 +358,25 @@ void SdlInputHandler::handleControlsMotionEvent(int windowX, int windowY)
         m_ControlsHoveredItem = hit;
         renderControls();
     }
+
+    bool pointerOver = controlsAcceptPointer() && controlsHitTest(windowX, windowY) != ControlsItemNone;
+    if (pointerOver != m_ControlsPointerOver) {
+        m_ControlsPointerOver = pointerOver;
+        updateControlsCursor();
+    }
+}
+
+void SdlInputHandler::updateControlsCursor()
+{
+    // In desktop mouse mode the local cursor is hidden and the host draws one
+    // into the video, but the overlay is drawn over that. Show the real cursor
+    // while it's over the pill or menu, or while the menu is open.
+    if (!isCaptureActive() || !m_AbsoluteMouseMode ||
+            m_MouseCursorCapturedVisibilityState != SDL_DISABLE) {
+        return;
+    }
+
+    SDL_ShowCursor((m_ControlsPointerOver || m_ControlsMenuOpen) ? SDL_ENABLE : SDL_DISABLE);
 }
 
 void SdlInputHandler::setControlsMenuOpen(bool open)
@@ -406,6 +416,7 @@ void SdlInputHandler::setControlsMenuOpen(bool open)
     m_ControlsPressedItem = ControlsItemNone;
     m_ControlsHoveredItem = ControlsItemNone;
     renderControls();
+    updateControlsCursor();
 }
 
 void SdlInputHandler::renderControls()
@@ -442,8 +453,16 @@ void SdlInputHandler::renderControls()
 
     bool pillActive = m_ControlsMenuOpen || m_ControlsHoveredItem == ControlsItemPill;
 
+    if (!m_ControlsPillHidden && !pillActive) {
+        // Idle: slim handle centered on the top edge
+        SDL_Rect handle = { layout.pill.x + (layout.pill.w - px(44)) / 2, px(3), px(44), SDL_max(3, px(5)) };
+        SDL_Rect backing = { handle.x - px(2), handle.y - px(2), handle.w + px(4), handle.h + px(4) };
+        fillRoundedRect(surface, backing, backing.h / 2.0f, k_HandleBacking);
+        fillRoundedRect(surface, handle, handle.h / 2.0f, k_Handle);
+    }
+
     // Pill: hamburger glyph and label
-    if (!m_ControlsPillHidden) {
+    if (!m_ControlsPillHidden && pillActive) {
         fillRoundedPanel(surface, layout.pill, layout.pill.h / 2.0f, k_PillBackground, 1);
 
         int iconX = layout.pill.x + px(16);
@@ -500,10 +519,6 @@ void SdlInputHandler::renderControls()
 
         drawText(surface, m_ControlsSmallFont, "Ctrl+Alt+Shift+B toggles this menu", k_TextDim,
                  layout.panel.x + layout.panel.w / 2, layout.footerY, px(18), 0);
-    }
-
-    if (!pillActive) {
-        multiplyAlpha(surface, k_IdleOpacity);
     }
 
     overlayManager.updateOverlaySurface(Overlay::OverlayControls, surface);

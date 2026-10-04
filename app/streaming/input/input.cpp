@@ -144,6 +144,7 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
     m_ControlsPillHidden = qEnvironmentVariableIntValue("BEAM_HIDE_PILL") != 0;
     m_ControlsMenuOpen = false;
     m_ControlsRestoreCapture = false;
+    m_ControlsPointerOver = false;
     m_ControlsHoveredItem = ControlsItemNone;
     m_ControlsPressedItem = ControlsItemNone;
     m_ControlsScale = 1.0f;

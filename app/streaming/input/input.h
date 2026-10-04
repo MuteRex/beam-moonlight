@@ -219,6 +219,8 @@ private:
 
     void handleControlsMotionEvent(int windowX, int windowY);
 
+    void updateControlsCursor();
+
     void setControlsMenuOpen(bool open);
 
     void renderControls();
@@ -291,6 +293,7 @@ private:
     bool m_ControlsPillHidden;
     bool m_ControlsMenuOpen;
     bool m_ControlsRestoreCapture;
+    bool m_ControlsPointerOver;
     int m_ControlsHoveredItem;
     int m_ControlsPressedItem;
     float m_ControlsScale;
