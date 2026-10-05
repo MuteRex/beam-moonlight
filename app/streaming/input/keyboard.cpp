@@ -71,7 +71,12 @@ namespace {
 struct PasteJob {
     std::vector<BeamPasteEvent> events;
     SDL_atomic_t* cancel;
+    SDL_atomic_t* running;
 };
+
+// Longest paste typed, in bytes. At ~3 events per character and 5 ms per
+// event this is under five minutes of typing, and it can be stopped.
+const size_t k_MaxPasteBytes = 16384;
 
 // Sunshine on Linux loses key events that arrive back to back (a lost key-up
 // then auto-repeats on the host), so each event is followed by a short gap.
@@ -113,6 +118,7 @@ int pasteThreadProc(void* data)
         LiSendKeyboardEvent2(k_ShiftKey, KEY_ACTION_UP, 0, 0);
     }
 
+    SDL_AtomicSet(job->running, 0);
     delete job;
     return 0;
 }
@@ -124,7 +130,14 @@ int pasteThreadProc(void* data)
 void SdlInputHandler::buildPasteEvents(const char* text, std::vector<BeamPasteEvent>& events)
 {
     bool shiftDown = false;
-    size_t length = SDL_min(strlen(text), (size_t)16384);
+    size_t length = strlen(text);
+    if (length > k_MaxPasteBytes) {
+        // Don't cut a UTF-8 sequence in half
+        length = k_MaxPasteBytes;
+        while (length > 0 && ((unsigned char)text[length] & 0xC0) == 0x80) {
+            length--;
+        }
+    }
 
     for (size_t i = 0; i < length; i++) {
         char c = text[i];
@@ -133,7 +146,7 @@ void SdlInputHandler::buildPasteEvents(const char* text, std::vector<BeamPasteEv
 
         // CRLF -> single Enter
         if (c == '\r') {
-            if (text[i + 1] == '\n') {
+            if (i + 1 < length && text[i + 1] == '\n') {
                 continue;
             }
             c = '\n';
@@ -180,6 +193,12 @@ void SdlInputHandler::cancelPaste()
         m_PasteThread = nullptr;
     }
     SDL_AtomicSet(&m_PasteCancel, 0);
+    SDL_AtomicSet(&m_PasteRunning, 0);
+}
+
+bool SdlInputHandler::isPasting()
+{
+    return SDL_AtomicGet(&m_PasteRunning) != 0;
 }
 
 void SdlInputHandler::typeTextAsKeys(const char* text)
@@ -189,11 +208,14 @@ void SdlInputHandler::typeTextAsKeys(const char* text)
 
     PasteJob* job = new PasteJob();
     job->cancel = &m_PasteCancel;
+    job->running = &m_PasteRunning;
     buildPasteEvents(text, job->events);
 
     // Typed on its own thread so the stream keeps running while it types
+    SDL_AtomicSet(&m_PasteRunning, 1);
     m_PasteThread = SDL_CreateThread(pasteThreadProc, "BeamPaste", job);
     if (m_PasteThread == nullptr) {
+        SDL_AtomicSet(&m_PasteRunning, 0);
         delete job;
     }
 }
@@ -284,6 +306,13 @@ void SdlInputHandler::performSpecialKeyCombo(KeyCombo combo)
     {
         SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION,
                     "Detected type clipboard text combo");
+
+        // Beam: the same combo (or menu item) stops a paste that's still typing
+        if (isPasting()) {
+            cancelPaste();
+            SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Stopped pasting");
+            break;
+        }
 
         // Force raise all keys to ensure that none of them interfere
         // with the text we're going to type.

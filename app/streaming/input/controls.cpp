@@ -19,11 +19,13 @@ using namespace BeamDraw;
 namespace {
 
 
+const int k_ControlsRows = 7;
+
 struct ControlsLayout {
     int width, height;
     SDL_Rect pill;
     SDL_Rect panel;
-    SDL_Rect rows[7];
+    SDL_Rect rows[k_ControlsRows];
     int footerY;
 };
 
@@ -47,9 +49,9 @@ ControlsLayout computeLayout(bool menuOpen, float scale)
     layout.panel = { 0, y, panelWidth, 0 };
 
     y += px(8);
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < k_ControlsRows; i++) {
         // Separate the destructive action from the rest
-        if (i == 6) {
+        if (i == k_ControlsRows - 1) {
             y += px(9);
         }
         layout.rows[i] = { px(6), y, panelWidth - px(12), px(34) };
@@ -69,6 +71,10 @@ ControlsLayout computeLayout(bool menuOpen, float scale)
 
 void SdlInputHandler::setControlsVisible(bool visible)
 {
+    // Every menu item needs a row, and Disconnect must be the last one
+    static_assert(ControlsItemMax == k_ControlsRows, "menu rows out of sync");
+    static_assert(ControlsItemDisconnect == k_ControlsRows - 1, "Disconnect must be last");
+
 #ifdef Q_OS_LINUX
     m_ControlsVisible = visible;
 #else
@@ -380,7 +386,7 @@ void SdlInputHandler::renderControls()
             { "Mouse mode", m_AbsoluteMouseMode ? "Desktop" : "Game" },
             { "Fullscreen", fullScreen ? "On" : "Off" },
             { "Performance stats", stats ? BeamStats::levelName(BeamStats::level()) : "Off" },
-            { "Paste clipboard", nullptr },
+            { isPasting() ? "Stop pasting" : "Paste clipboard", nullptr },
             { captured ? "Release mouse" : "Capture mouse", nullptr },
             { "Minimize", nullptr },
             { "Disconnect", nullptr },

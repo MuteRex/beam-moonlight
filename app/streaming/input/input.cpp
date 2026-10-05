@@ -152,6 +152,7 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
     m_ControlsSmallFont = nullptr;
     m_PasteThread = nullptr;
     SDL_AtomicSet(&m_PasteCancel, 0);
+    SDL_AtomicSet(&m_PasteRunning, 0);
 
     m_OldIgnoreDevices = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES);
     m_OldIgnoreDevicesExcept = SDL_GetHint(SDL_HINT_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT);

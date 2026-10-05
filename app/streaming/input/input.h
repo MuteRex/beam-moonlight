@@ -212,6 +212,8 @@ private:
 
     void cancelPaste();
 
+    bool isPasting();
+
     enum ControlsItem {
         ControlsItemPanel = -3,
         ControlsItemNone = -2,
@@ -318,6 +320,7 @@ private:
     // Beam: background typing for paste
     SDL_Thread* m_PasteThread;
     SDL_atomic_t m_PasteCancel;
+    SDL_atomic_t m_PasteRunning;
     int m_NumFingersDown;
 
     static const int k_ButtonMap[];
