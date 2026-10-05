@@ -1,3 +1,115 @@
+# Moonlight PC — Beam fork
+
+This is a fork of [moonlight-qt](https://github.com/moonlight-stream/moonlight-qt)
+used by **[Beam](https://github.com/MuteRex/beam)**, a Parsec-style GTK4 launcher
+for Moonlight + Sunshine. It adds an in-stream menu, a redesigned stats overlay
+and a few Linux fixes. All changes live on the `beam-overlay` branch; `master`
+is upstream, unchanged. Everything upstream Moonlight does still works, and the
+fork runs fine on its own without Beam.
+
+Tested on Linux (Wayland, EGL/VAAPI) against Sunshine. The in-stream menu is
+Linux-only.
+
+## What's changed
+
+### In-stream Beam menu
+A clickable pill at the top centre of the stream opens a menu drawn over the
+video, so stream controls don't need memorised shortcuts.
+
+- **Idle:** a slim handle on the top edge that expands into a "Beam" pill on hover.
+- **Menu items:** Mouse mode (Desktop/Game), Fullscreen, Performance stats
+  (cycles Off → Basic → Standard → Advanced), Paste clipboard (Stop pasting
+  while one is typing), Release/Capture mouse, Minimize, Disconnect.
+- **Ctrl+Alt+Shift+B** opens/closes the menu from anywhere, including Game
+  mode, where it temporarily releases mouse capture and restores it on close.
+- Items call Moonlight's existing shortcut handlers, so no stream logic is duplicated.
+- Clicks on the pill or menu never reach the host. Buttons held when the menu
+  opens are released on the host, so nothing gets stuck down.
+- The real cursor is shown over the pill and menu (in Desktop mouse mode the
+  host-drawn cursor would otherwise be hidden under the overlay).
+- Scales with display height (1×–2.5×) and re-places itself on window resize.
+
+Files: `app/streaming/input/controls.cpp` (layout, drawing, hit-testing, menu
+state), `app/streaming/beamdraw.{h,cpp}` (anti-aliased rounded shapes and text),
+hooks in `input.cpp`, `mouse.cpp`, `keyboard.cpp`, `session.cpp`.
+
+### Performance stats panel (replaces the plain-text stats)
+The stats overlay (Ctrl+Alt+Shift+S, the menu, or the gamepad combo) is now a
+styled panel with three levels, colour-coded green / amber / red against
+healthy-LAN targets:
+
+| Level | Shows |
+|-------|-------|
+| **Basic** | FPS, frametime, total latency, in one compact pill |
+| **Standard** | + latency breakdown (host / network / decode / render), stream format, bitrate, dropped frames |
+| **Advanced** | + frametime min/max and jitter, per-stage FPS (host › network › decode › render), network RTT and variance, peak bitrate, display mode, V-Sync, GPU, decoder, CPU, Moonlight's own CPU use |
+
+Frametime is measured as the real interval between presented frames, recorded
+in the pacer; gaps over one second, such as a minimised window, are left out.
+Moonlight's end-of-session stats log is unchanged.
+
+Files: `app/streaming/beamstats.{h,cpp}`, `publishBeamStats()` in
+`app/streaming/video/ffmpeg.cpp`, frame-interval tracking in `pacer.cpp` and
+`decoder.h`.
+
+### Paste typed as real keystrokes
+Upstream sends the clipboard as a Unicode text event, which Sunshine on Linux
+turns into Ctrl+Shift+U sequences that terminals and many apps ignore. The fork
+types it as US-layout key presses instead, falling back to text events only for
+characters that have no key.
+
+- Typed on a background thread with a 5 ms gap between events (Sunshine on
+  Linux drops back-to-back key events, and a lost key-up auto-repeats on the
+  host), so the stream keeps running while it types.
+- Paste again to stop. A stopped paste releases any held key or Shift on the host.
+- Capped at 16 KB (cut at a UTF-8 character boundary); CRLF becomes a single Enter.
+
+### Window placement on Wayland
+- **`BEAM_DISPLAY_POS=x,y`** opens the stream on the monitor at that layout
+  position. On Wayland the Qt window can't report its screen, so streams
+  otherwise open on display 0.
+- Windowed streams are capped at 90% of the display, because a display-sized
+  window gets maximised on Wayland.
+- When started from the command line, the progress window opens as a normal
+  window rather than taking the saved maximised/fullscreen UI mode, which
+  also leaked into the stream window state.
+
+### Overlay plumbing
+`OverlayManager` gains custom-surface overlays, which keep their surface and re-send it to a
+new renderer (`updateOverlaySurface`), and recorded top-centre placement for
+hit-testing (`placeTopCenterOverlay`, `windowPointToOverlay`, which also maps
+HiDPI window points to drawable pixels). The DRM, EGL, libplacebo/Vulkan, SDL,
+VAAPI and VDPAU renderers place the new overlay; VAAPI also reports the GPU name
+for the stats panel.
+
+## Environment variables
+
+| Variable | Effect |
+|----------|--------|
+| `BEAM_HIDE_PILL=1` | Hide the pill; Ctrl+Alt+Shift+B still opens the menu |
+| `BEAM_STATS_LEVEL=basic\|standard\|advanced` | Starting stats level (default standard) |
+| `BEAM_DISPLAY_POS=x,y` | Monitor to open the stream on |
+
+Beam sets these from its settings.
+
+## Building
+
+Same as upstream (see below), from this branch:
+
+```bash
+git clone --recursive -b beam-overlay https://github.com/MuteRex/beam-moonlight.git
+cd beam-moonlight && qmake6 && make -j"$(nproc)" release   # → app/moonlight
+```
+
+`SDL2_ttf` is required, as upstream already needs it. Fonts are taken from the system
+(Ubuntu, Cantarell or DejaVu).
+
+## License
+
+GPL-3.0, like upstream. Original README follows.
+
+---
+
 # Moonlight PC
 
 [Moonlight PC](https://moonlight-stream.org) is an open source PC client for NVIDIA GameStream and [Sunshine](https://github.com/LizardByte/Sunshine).
