@@ -17,9 +17,15 @@ A clickable pill at the top centre of the stream opens a menu drawn over the
 video, so stream controls don't need memorised shortcuts.
 
 - **Idle:** a slim handle on the top edge that expands into a "Beam" pill on hover.
-- **Menu items:** Mouse mode (Desktop/Game), Fullscreen, Performance stats
-  (cycles Off → Basic → Standard → Advanced), Paste clipboard (Stop pasting
-  while one is typing), Release/Capture mouse, Minimize, Disconnect.
+- **Menu items:** Mouse mode (Desktop/Game), Fullscreen, Full immersion,
+  Screen, Performance stats (cycles Off → Basic → Standard → Advanced), Paste
+  clipboard (Stop pasting while one is typing), Release/Capture mouse,
+  Minimize, Disconnect.
+- **Full immersion** captures system keys in any window mode, so Super,
+  Alt+Tab and the rest go to the host (GNOME asks once to allow it; Super+Esc
+  is GNOME's own way out). Off returns them to the local desktop.
+- **Screen** buttons switch which host monitor is streamed, by sending
+  Sunshine's Ctrl+Alt+Shift+F1..F12 shortcut as real key presses.
 - **Ctrl+Alt+Shift+B** opens/closes the menu from anywhere, including Game
   mode, where it temporarily releases mouse capture and restores it on close.
 - Items call Moonlight's existing shortcut handlers, so no stream logic is duplicated.
@@ -89,6 +95,7 @@ for the stats panel.
 | `BEAM_HIDE_PILL=1` | Hide the pill; Ctrl+Alt+Shift+B still opens the menu |
 | `BEAM_STATS_LEVEL=basic\|standard\|advanced` | Starting stats level (default standard) |
 | `BEAM_DISPLAY_POS=x,y` | Monitor to open the stream on |
+| `BEAM_SCREENS=n` | Screen buttons in the menu, 1–12 (default 2) |
 
 Beam sets these from its settings.
 
