@@ -36,7 +36,6 @@ Layout computeLayout(bool menuOpen, float scale, int screens)
         y += px(34);
     }
 
-    // Screen buttons, right-aligned in the Screen row
     const SDL_Rect& screenRow = layout.rows[RowScreen];
     int chipW = px(24), chipH = px(22), chipGap = px(5);
     int chipX = screenRow.x + screenRow.w - px(8) - layout.screens * chipW - (layout.screens - 1) * chipGap;

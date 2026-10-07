@@ -1,8 +1,6 @@
 #pragma once
 
-// Beam: the in-stream menu's pure logic (layout, hit-testing, the Sunshine
-// screen-switch chord, the Full immersion rule). No window, renderer or
-// connection needed, so tests/beam can check it directly.
+// Beam: in-stream menu logic without SDL windows or a connection (tests/beam)
 
 #include <SDL.h>
 #include <vector>
@@ -46,11 +44,9 @@ Layout computeLayout(bool menuOpen, float scale, int screens);
 
 int hitTest(const Layout& layout, bool menuOpen, bool pillHidden, int x, int y);
 
-// Matches StreamingPreferences::CaptureSysKeysMode (checked in input.cpp)
+// Matches StreamingPreferences::CaptureSysKeysMode (static_assert in controls.cpp)
 enum CaptureMode { CaptureOff, CaptureFullScreen, CaptureAlways };
 
-// Full immersion is "on" when system keys are captured in the current window
-// mode; toggling switches between always and off.
 bool immersionOn(int captureMode, bool fullScreen);
 int toggledCaptureMode(int captureMode, bool fullScreen);
 
@@ -60,9 +56,7 @@ struct KeyEvent {
     char modifiers;
 };
 
-// Ctrl+Alt+Shift+F<index+1> as real key presses: Sunshine looks for its
-// shortcuts in the modifier key-downs, not just the modifier flags.
-// Empty for an index outside 0..MaxScreens-1.
+// Sunshine matches its shortcuts on modifier key-downs, not modifier flags
 std::vector<KeyEvent> screenSwitchChord(int index);
 
 }

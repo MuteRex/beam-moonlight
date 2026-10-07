@@ -26,7 +26,6 @@ const int k_ScreenChipBase = BeamMenu::HitScreenChip;
 void SdlInputHandler::setControlsVisible(bool visible)
 {
     // Every menu item needs a row, and Disconnect must be the last one
-    // Rows, hit values and capture modes are shared with BeamMenu (tested there)
     static_assert((int)ControlsItemMax == (int)BeamMenu::RowCount, "menu rows out of sync");
     static_assert((int)ControlsItemDisconnect == (int)BeamMenu::RowDisconnect, "Disconnect must be last");
     static_assert((int)ControlsItemImmersion == (int)BeamMenu::RowImmersion, "Immersion row out of sync");
@@ -163,7 +162,6 @@ bool SdlInputHandler::handleControlsButtonEvent(SDL_MouseButtonEvent* event)
         renderControls();
     }
     else if (hit == ControlsItemScreen) {
-        // A click beside the buttons steps to the next screen
         switchHostScreen((m_ControlsScreen + 1) % m_ControlsScreens);
         renderControls();
     }
@@ -377,7 +375,6 @@ void SdlInputHandler::renderControls()
                      row.x + row.w - px(12), row.y, row.h, 1);
         }
 
-        // Screen buttons: the current one filled, the hovered one outlined
         for (int i = 0; i < m_ControlsScreens; i++) {
             const SDL_Rect& chip = layout.screenChips[i];
             bool current = i == m_ControlsScreen;
@@ -427,10 +424,7 @@ bool SdlInputHandler::isImmersionOn()
 
 void SdlInputHandler::toggleImmersion()
 {
-    // On: every key reaches the host, Super and Alt+Tab included, windowed or
-    // not. The compositor keeps its own escape (Super+Esc on GNOME), and
-    // Moonlight's Ctrl+Alt+Shift combos still work locally, so the menu can
-    // always be reached again with Ctrl+Alt+Shift+B.
+    // Ctrl+Alt+Shift combos stay local, so Ctrl+Alt+Shift+B still opens the menu
     bool fullScreen = (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN) != 0;
     m_CaptureSystemKeysMode = (StreamingPreferences::CaptureSysKeysMode)
             BeamMenu::toggledCaptureMode(m_CaptureSystemKeysMode, fullScreen);
@@ -441,8 +435,7 @@ void SdlInputHandler::toggleImmersion()
 
 namespace {
 
-// Sunshine on Linux drops key events that arrive back to back, so the chord is
-// typed with gaps on a background thread rather than sent as one burst.
+// Sunshine on Linux drops back-to-back key events
 int switchScreenThreadProc(void* data)
 {
     std::vector<BeamMenu::KeyEvent>* events = (std::vector<BeamMenu::KeyEvent>*)data;
@@ -462,7 +455,6 @@ void SdlInputHandler::switchHostScreen(int index)
         return;
     }
 
-    // Sunshine: Ctrl+Alt+Shift+F1..F12 streams monitor 0..11 instead
     auto* events = new std::vector<BeamMenu::KeyEvent>(BeamMenu::screenSwitchChord(index));
     SDL_Thread* thread = SDL_CreateThread(switchScreenThreadProc, "BeamScreen", events);
     if (thread == nullptr) {

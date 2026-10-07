@@ -1,5 +1,4 @@
-// Unit tests for the Beam in-stream menu logic (app/streaming/beammenu.cpp).
-//   make -C tests/beam test
+// make -C tests/beam test
 
 #include "streaming/beammenu.h"
 
