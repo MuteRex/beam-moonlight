@@ -220,6 +220,8 @@ private:
         ControlsItemPill = -1,
         ControlsItemMouseMode,
         ControlsItemFullScreen,
+        ControlsItemImmersion,
+        ControlsItemScreen,
         ControlsItemStats,
         ControlsItemPaste,
         ControlsItemReleaseMouse,
@@ -237,6 +239,14 @@ private:
     void handleControlsMotionEvent(int windowX, int windowY);
 
     void updateControlsCursor();
+
+    static KeyCombo comboForItem(int item);
+
+    bool isImmersionOn();
+
+    void toggleImmersion();
+
+    void switchHostScreen(int index);
 
     void setControlsMenuOpen(bool open);
 
@@ -316,6 +326,8 @@ private:
     float m_ControlsScale;
     TTF_Font* m_ControlsFont;
     TTF_Font* m_ControlsSmallFont;
+    int m_ControlsScreens;       // screen buttons shown (BEAM_SCREENS)
+    int m_ControlsScreen;        // host screen we last switched to
 
     // Beam: background typing for paste
     SDL_Thread* m_PasteThread;
@@ -324,4 +336,7 @@ private:
     int m_NumFingersDown;
 
     static const int k_ButtonMap[];
+
+    // Beam: Sunshine switches monitors on Ctrl+Alt+Shift+F1..F12
+    static const int k_ControlsMaxScreens = 12;
 };

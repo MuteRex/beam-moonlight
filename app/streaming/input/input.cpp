@@ -150,6 +150,10 @@ SdlInputHandler::SdlInputHandler(StreamingPreferences& prefs, int streamWidth, i
     m_ControlsScale = 1.0f;
     m_ControlsFont = nullptr;
     m_ControlsSmallFont = nullptr;
+    bool screensSet = false;
+    int screens = qEnvironmentVariableIntValue("BEAM_SCREENS", &screensSet);
+    m_ControlsScreens = screensSet ? SDL_max(1, SDL_min(k_ControlsMaxScreens, screens)) : 2;
+    m_ControlsScreen = 0;
     m_PasteThread = nullptr;
     SDL_AtomicSet(&m_PasteCancel, 0);
     SDL_AtomicSet(&m_PasteRunning, 0);
