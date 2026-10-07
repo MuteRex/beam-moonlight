@@ -188,6 +188,7 @@ SOURCES += \
     streaming/input/abstouch.cpp \
     streaming/input/controls.cpp \
     streaming/beamdraw.cpp \
+    streaming/beammenu.cpp \
     streaming/beamstats.cpp \
     streaming/input/gamepad.cpp \
     streaming/input/input.cpp \
@@ -232,6 +233,7 @@ HEADERS += \
     settings/streamingpreferences.h \
     streaming/input/input.h \
     streaming/beamdraw.h \
+    streaming/beammenu.h \
     streaming/beamstats.h \
     streaming/session.h \
     streaming/audio/renderers/renderer.h \

@@ -12,87 +12,31 @@
 #include "SDL_compat.h"
 #include "streaming/session.h"
 #include "streaming/beamdraw.h"
+#include "streaming/beammenu.h"
 #include "streaming/beamstats.h"
 
 using namespace BeamDraw;
 
 namespace {
 
-
-const int k_ControlsRows = 9;
-
-// Hit-test values for the screen buttons inside the Screen row
-const int k_ScreenChipBase = 100;
-
-// Mirrors of private SdlInputHandler values, checked in setControlsVisible()
-const int k_ScreenRow = 3;
-const int k_MaxScreenChips = 12;
-
-struct ControlsLayout {
-    int width, height;
-    SDL_Rect pill;
-    SDL_Rect panel;
-    SDL_Rect rows[k_ControlsRows];
-    SDL_Rect screenChips[k_MaxScreenChips];
-    int footerY;
-};
-
-ControlsLayout computeLayout(bool menuOpen, float scale, int screens)
-{
-    auto px = [scale](float v) { return (int)(v * scale + 0.5f); };
-
-    ControlsLayout layout = {};
-    int pillWidth = px(104), pillHeight = px(30), pillTop = px(6);
-    // Wide enough for the Screen label plus its buttons
-    int panelWidth = SDL_max(px(272), px(128) + screens * px(29));
-
-    layout.width = menuOpen ? panelWidth : pillWidth;
-    layout.pill = { (layout.width - pillWidth) / 2, pillTop, pillWidth, pillHeight };
-
-    if (!menuOpen) {
-        layout.height = pillTop + pillHeight;
-        return layout;
-    }
-
-    int y = layout.pill.y + layout.pill.h + px(8);
-    layout.panel = { 0, y, panelWidth, 0 };
-
-    y += px(8);
-    for (int i = 0; i < k_ControlsRows; i++) {
-        // Separate the destructive action from the rest
-        if (i == k_ControlsRows - 1) {
-            y += px(9);
-        }
-        layout.rows[i] = { px(6), y, panelWidth - px(12), px(34) };
-        y += px(34);
-    }
-
-    // Screen buttons, right-aligned in the Screen row
-    const SDL_Rect& screenRow = layout.rows[k_ScreenRow];
-    int chipW = px(24), chipH = px(22), chipGap = px(5);
-    int chipX = screenRow.x + screenRow.w - px(8) - screens * chipW - (screens - 1) * chipGap;
-    for (int i = 0; i < screens; i++) {
-        layout.screenChips[i] = { chipX + i * (chipW + chipGap), screenRow.y + (screenRow.h - chipH) / 2, chipW, chipH };
-    }
-
-    layout.footerY = y + px(4);
-    y = layout.footerY + px(22);
-
-    layout.panel.h = y - layout.panel.y;
-    layout.height = y;
-    return layout;
-}
-
+const int k_ScreenChipBase = BeamMenu::HitScreenChip;
 
 }
 
 void SdlInputHandler::setControlsVisible(bool visible)
 {
     // Every menu item needs a row, and Disconnect must be the last one
-    static_assert(ControlsItemMax == k_ControlsRows, "menu rows out of sync");
-    static_assert(ControlsItemDisconnect == k_ControlsRows - 1, "Disconnect must be last");
-    static_assert(ControlsItemScreen == k_ScreenRow, "Screen row index out of sync");
-    static_assert(k_ControlsMaxScreens == k_MaxScreenChips, "screen button count out of sync");
+    // Rows, hit values and capture modes are shared with BeamMenu (tested there)
+    static_assert((int)ControlsItemMax == (int)BeamMenu::RowCount, "menu rows out of sync");
+    static_assert((int)ControlsItemDisconnect == (int)BeamMenu::RowDisconnect, "Disconnect must be last");
+    static_assert((int)ControlsItemImmersion == (int)BeamMenu::RowImmersion, "Immersion row out of sync");
+    static_assert((int)ControlsItemScreen == (int)BeamMenu::RowScreen, "Screen row out of sync");
+    static_assert(ControlsItemPill == BeamMenu::HitPill && ControlsItemNone == BeamMenu::HitNone &&
+                  ControlsItemPanel == BeamMenu::HitPanel, "hit values out of sync");
+    static_assert(k_ControlsMaxScreens == BeamMenu::MaxScreens, "screen button count out of sync");
+    static_assert((int)StreamingPreferences::CSK_OFF == (int)BeamMenu::CaptureOff &&
+                  (int)StreamingPreferences::CSK_FULLSCREEN == (int)BeamMenu::CaptureFullScreen &&
+                  (int)StreamingPreferences::CSK_ALWAYS == (int)BeamMenu::CaptureAlways, "capture modes out of sync");
 
 #ifdef Q_OS_LINUX
     m_ControlsVisible = visible;
@@ -165,29 +109,8 @@ int SdlInputHandler::controlsHitTest(int windowX, int windowY)
         return ControlsItemNone;
     }
 
-    ControlsLayout layout = computeLayout(m_ControlsMenuOpen, m_ControlsScale, m_ControlsScreens);
-    SDL_Point point = { x, y };
-
-    if (!m_ControlsPillHidden && SDL_PointInRect(&point, &layout.pill)) {
-        return ControlsItemPill;
-    }
-    else if (m_ControlsMenuOpen) {
-        for (int i = 0; i < m_ControlsScreens; i++) {
-            if (SDL_PointInRect(&point, &layout.screenChips[i])) {
-                return k_ScreenChipBase + i;
-            }
-        }
-        for (int i = 0; i < ControlsItemMax; i++) {
-            if (SDL_PointInRect(&point, &layout.rows[i])) {
-                return i;
-            }
-        }
-        if (SDL_PointInRect(&point, &layout.panel)) {
-            return ControlsItemPanel;
-        }
-    }
-
-    return ControlsItemNone;
+    BeamMenu::Layout layout = BeamMenu::computeLayout(m_ControlsMenuOpen, m_ControlsScale, m_ControlsScreens);
+    return BeamMenu::hitTest(layout, m_ControlsMenuOpen, m_ControlsPillHidden, x, y);
 }
 
 bool SdlInputHandler::handleControlsButtonEvent(SDL_MouseButtonEvent* event)
@@ -376,7 +299,7 @@ void SdlInputHandler::renderControls()
         }
     }
 
-    ControlsLayout layout = computeLayout(m_ControlsMenuOpen, m_ControlsScale, m_ControlsScreens);
+    BeamMenu::Layout layout = BeamMenu::computeLayout(m_ControlsMenuOpen, m_ControlsScale, m_ControlsScreens);
     SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormat(0, layout.width, layout.height, 32, SDL_PIXELFORMAT_ARGB8888);
     if (surface == nullptr) {
         return;
@@ -499,8 +422,7 @@ bool SdlInputHandler::isImmersionOn()
     // The mode, not whether the grab is live: the grab is dropped while the
     // menu has the mouse released, and the menu should still say "On"
     bool fullScreen = (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN) != 0;
-    return m_CaptureSystemKeysMode == StreamingPreferences::CSK_ALWAYS ||
-            (m_CaptureSystemKeysMode == StreamingPreferences::CSK_FULLSCREEN && fullScreen);
+    return BeamMenu::immersionOn(m_CaptureSystemKeysMode, fullScreen);
 }
 
 void SdlInputHandler::toggleImmersion()
@@ -509,8 +431,9 @@ void SdlInputHandler::toggleImmersion()
     // not. The compositor keeps its own escape (Super+Esc on GNOME), and
     // Moonlight's Ctrl+Alt+Shift combos still work locally, so the menu can
     // always be reached again with Ctrl+Alt+Shift+B.
-    m_CaptureSystemKeysMode = isImmersionOn() ? StreamingPreferences::CSK_OFF
-                                              : StreamingPreferences::CSK_ALWAYS;
+    bool fullScreen = (SDL_GetWindowFlags(m_Window) & SDL_WINDOW_FULLSCREEN) != 0;
+    m_CaptureSystemKeysMode = (StreamingPreferences::CaptureSysKeysMode)
+            BeamMenu::toggledCaptureMode(m_CaptureSystemKeysMode, fullScreen);
     SDL_LogInfo(SDL_LOG_CATEGORY_APPLICATION, "Beam: full immersion %s",
                 m_CaptureSystemKeysMode == StreamingPreferences::CSK_ALWAYS ? "on" : "off");
     updateKeyboardGrabState();
@@ -518,30 +441,16 @@ void SdlInputHandler::toggleImmersion()
 
 namespace {
 
-// Sunshine checks for its shortcuts using real modifier key-downs, and on Linux
-// it drops key events that arrive back to back, so the chord is typed with
-// gaps on a background thread rather than sent as one burst.
+// Sunshine on Linux drops key events that arrive back to back, so the chord is
+// typed with gaps on a background thread rather than sent as one burst.
 int switchScreenThreadProc(void* data)
 {
-    const short fKey = (short)(intptr_t)data;
-    const short chord[] = { (short)(0x8000 | 0xA2), (short)(0x8000 | 0xA4), (short)(0x8000 | 0xA0) }; // LCtrl, LAlt, LShift
-    const char chordModifiers[] = { MODIFIER_CTRL, MODIFIER_CTRL | MODIFIER_ALT,
-                                    MODIFIER_CTRL | MODIFIER_ALT | MODIFIER_SHIFT };
-    const char all = MODIFIER_CTRL | MODIFIER_ALT | MODIFIER_SHIFT;
-    const Uint32 gapMs = 15;
-
-    for (int i = 0; i < 3; i++) {
-        LiSendKeyboardEvent2(chord[i], KEY_ACTION_DOWN, chordModifiers[i], 0);
-        SDL_Delay(gapMs);
+    std::vector<BeamMenu::KeyEvent>* events = (std::vector<BeamMenu::KeyEvent>*)data;
+    for (const BeamMenu::KeyEvent& event : *events) {
+        LiSendKeyboardEvent2(event.keyCode, event.action, event.modifiers, 0);
+        SDL_Delay(15);
     }
-    LiSendKeyboardEvent2(fKey, KEY_ACTION_DOWN, all, 0);
-    SDL_Delay(gapMs);
-    LiSendKeyboardEvent2(fKey, KEY_ACTION_UP, all, 0);
-    SDL_Delay(gapMs);
-    for (int i = 2; i >= 0; i--) {
-        LiSendKeyboardEvent2(chord[i], KEY_ACTION_UP, i > 0 ? chordModifiers[i - 1] : 0, 0);
-        SDL_Delay(gapMs);
-    }
+    delete events;
     return 0;
 }
 
@@ -554,9 +463,10 @@ void SdlInputHandler::switchHostScreen(int index)
     }
 
     // Sunshine: Ctrl+Alt+Shift+F1..F12 streams monitor 0..11 instead
-    short fKey = (short)(0x8000 | (0x70 + index)); // VK_F1 + index
-    SDL_Thread* thread = SDL_CreateThread(switchScreenThreadProc, "BeamScreen", (void*)(intptr_t)fKey);
+    auto* events = new std::vector<BeamMenu::KeyEvent>(BeamMenu::screenSwitchChord(index));
+    SDL_Thread* thread = SDL_CreateThread(switchScreenThreadProc, "BeamScreen", events);
     if (thread == nullptr) {
+        delete events;
         SDL_LogWarn(SDL_LOG_CATEGORY_APPLICATION, "Beam: couldn't start screen switch: %s", SDL_GetError());
         return;
     }

@@ -35,8 +35,10 @@ video, so stream controls don't need memorised shortcuts.
   host-drawn cursor would otherwise be hidden under the overlay).
 - Scales with display height (1×–2.5×) and re-places itself on window resize.
 
-Files: `app/streaming/input/controls.cpp` (layout, drawing, hit-testing, menu
-state), `app/streaming/beamdraw.{h,cpp}` (anti-aliased rounded shapes and text),
+Files: `app/streaming/input/controls.cpp` (drawing, menu state, actions),
+`app/streaming/beammenu.{h,cpp}` (layout, hit-testing, the screen-switch chord,
+the immersion rule; no window needed, so it's unit tested),
+`app/streaming/beamdraw.{h,cpp}` (anti-aliased rounded shapes and text),
 hooks in `input.cpp`, `mouse.cpp`, `keyboard.cpp`, `session.cpp`.
 
 ### Performance stats panel (replaces the plain-text stats)
@@ -106,6 +108,12 @@ Same as upstream (see below), from this branch:
 ```bash
 git clone --recursive -b beam-overlay https://github.com/MuteRex/beam-moonlight.git
 cd beam-moonlight && qmake6 && make -j"$(nproc)" release   # → app/moonlight
+```
+
+Unit tests for the Beam menu logic (needs only a compiler and SDL2 headers):
+
+```bash
+make -C tests/beam test
 ```
 
 `SDL2_ttf` is required, as upstream already needs it. Fonts are taken from the system
